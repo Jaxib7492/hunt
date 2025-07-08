@@ -1,94 +1,91 @@
 import streamlit as st
 import gspread
-from google.oauth2.service_account import Credentials
+from google.oauth2 import service_account
 import os
 
 # -------- Google Sheets Setup --------
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1Bu8mzwoJUXw3JAD63nmTcmAlYo9GdR9vQyzGkukTWgA"
-SHEET_NAME = "Outreach Data"  # Your worksheet/tab name
+SHEET_NAME = "Outreach Data"
 
-@st.cache_resource(ttl=3600)
-def get_gsheet_client():
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    client = gspread.authorize(creds)
-    return client
+# Authenticate using credentials stored in .streamlit/secrets.toml
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=scopes
+)
+client = gspread.authorize(creds)
 
-# -------- File-based Name Persistence --------
+# -------- Persistent Name Store --------
+NAME_FILE = "name_store.txt"
+
 def load_saved_name():
-    if os.path.exists("name_store.txt"):
-        with open("name_store.txt", "r") as f:
+    if os.path.exists(NAME_FILE):
+        with open(NAME_FILE, "r", encoding="utf-8") as f:
             return f.read().strip()
     return ""
 
-def save_name_to_file(name):
-    with open("name_store.txt", "w") as f:
+def save_name(name):
+    with open(NAME_FILE, "w", encoding="utf-8") as f:
         f.write(name)
 
-# -------- Google Sheet Row & Entry Logic --------
-def find_next_empty_bcf_row(sheet):
-    """Find the first row where columns B, C, and F are all empty."""
-    data = sheet.get_all_values()
-    for idx, row in enumerate(data, start=1):
-        b = row[1] if len(row) > 1 else ""
-        c = row[2] if len(row) > 2 else ""
-        f = row[5] if len(row) > 5 else ""
-        if not b and not c and not f:
-            return idx
-    return len(data) + 1
-
-def save_reference_entry(name, contact, reference):
-    client = get_gsheet_client()
+# -------- Entry Saving --------
+def save_reference_entry(name, email, reference):
     sheet = client.open_by_url(GSHEET_URL).worksheet(SHEET_NAME)
+    data = sheet.get_all_values()
+    
+    # Check for duplicate email in column C (index 2)
+    existing_emails = [row[2].strip().lower() for row in data if len(row) > 2]
+    if email.strip().lower() in existing_emails:
+        st.error("❌ This email already exists in the sheet.")
+        return False
 
-    next_row = find_next_empty_bcf_row(sheet)
+    # Find the next empty row based on columns B (1), C (2), and F (5)
+    next_row = None
+    for i, row in enumerate(data[1:], start=2):  # Skip header row if any
+        b_empty = len(row) <= 1 or row[1].strip() == ""
+        c_empty = len(row) <= 2 or row[2].strip() == ""
+        f_empty = len(row) <= 5 or row[5].strip() == ""
+        if b_empty and c_empty and f_empty:
+            next_row = i
+            break
 
-    if next_row > sheet.row_count:
-        sheet.add_rows(100)
+    if not next_row:
+        next_row = len(data) + 1
 
-    # Write to Columns B (2), C (3), F (6)
-    sheet.update_cell(next_row, 2, name)
-    sheet.update_cell(next_row, 3, contact)
-    sheet.update_cell(next_row, 6, reference)
+    # Update columns B, C, F
+    sheet.update_cell(next_row, 2, name)      # Column B
+    sheet.update_cell(next_row, 3, email)     # Column C
+    sheet.update_cell(next_row, 6, reference) # Column F
 
-# -------- Streamlit App UI --------
+    return True
+
+# -------- Streamlit UI --------
 def main():
-    st.set_page_config(page_title="Reference Entry", layout="centered")
-    st.title("📋 Submit Your Reference")
+    st.set_page_config(page_title="Outreach Entry Form")
+    st.title("📋 Outreach Submission Form")
 
-    # Sidebar: Name input (persistent)
-    st.sidebar.header("👤 Your Name")
-    if "name" not in st.session_state:
-        st.session_state.name = load_saved_name()
+    # Load saved name
+    saved_name = load_saved_name()
 
-    new_name = st.sidebar.text_input("Enter your name once", value=st.session_state.name)
+    with st.form("entry_form"):
+        name = st.text_input("👤 Your Name", value=saved_name)
+        contact = st.text_input("📧 Client Email")
+        reference = st.text_area("📝 Reference Message")
 
-    if new_name != st.session_state.name:
-        st.session_state.name = new_name
-        save_name_to_file(new_name)
-
-    # Main Form
-    st.subheader("✉️ Contact & Reference Info")
-    with st.form("reference_form"):
-        contact = st.text_input("Email / Contact Info")
-        reference = st.text_area("Reference")
-        submitted = st.form_submit_button("✅ Submit")
+        submitted = st.form_submit_button("Submit")
 
         if submitted:
-            if not st.session_state.name:
-                st.warning("⚠️ Please enter your name from the sidebar.")
-            elif not contact or not reference:
-                st.warning("⚠️ Please fill in both Contact and Reference fields.")
+            if not name or not contact or not reference:
+                st.warning("⚠️ Please fill in all fields.")
             else:
-                try:
-                    save_reference_entry(st.session_state.name, contact, reference)
+                save_name(name)
+                success = save_reference_entry(name, contact, reference)
+                if success:
                     st.success("✅ Entry submitted successfully!")
-                except Exception as e:
-                    st.error("❌ Failed to submit entry:")
-                    st.exception(e)
-
+                    st.experimental_set_query_params()  # Clear query params
+                    st.session_state["contact"] = ""
+                    st.session_state["reference"] = ""
+                    
+# Run app
 if __name__ == "__main__":
     main()
