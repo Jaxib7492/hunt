@@ -1,75 +1,91 @@
 import streamlit as st
 import gspread
-from google.oauth2.service_account import Credentials
+from google.oauth2 import service_account
+import os
 
-# --------- CONFIG ---------
+# -------- Google Sheets Setup --------
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1Bu8mzwoJUXw3JAD63nmTcmAlYo9GdR9vQyzGkukTWgA"
 SHEET_NAME = "Outreach Data"
 
-# --------- GOOGLE SHEETS AUTH ---------
-@st.cache_resource
-def get_gsheet_client():
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = Credentials.from_service_account_file("credentials.json", scopes=scopes)
-    return gspread.authorize(creds)
+# Authenticate using credentials stored in .streamlit/secrets.toml
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=scopes
+)
+client = gspread.authorize(creds)
 
-# --------- SHEET UTILITY ---------
-def get_next_available_row(sheet, col_letter):
-    col_values = sheet.col_values(ord(col_letter.upper()) - 64)
-    return len(col_values) + 1
+# -------- Persistent Name Store --------
+NAME_FILE = "name_store.txt"
 
-def email_exists(sheet, email):
-    emails = sheet.col_values(3)  # Column C is index 3
-    return email.strip().lower() in (e.strip().lower() for e in emails)
+def load_saved_name():
+    if os.path.exists(NAME_FILE):
+        with open(NAME_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return ""
 
+def save_name(name):
+    with open(NAME_FILE, "w", encoding="utf-8") as f:
+        f.write(name)
+
+# -------- Entry Saving --------
 def save_reference_entry(name, email, reference):
-    client = get_gsheet_client()
     sheet = client.open_by_url(GSHEET_URL).worksheet(SHEET_NAME)
-
-    if email_exists(sheet, email):
+    data = sheet.get_all_values()
+    
+    # Check for duplicate email in column C (index 2)
+    existing_emails = [row[2].strip().lower() for row in data if len(row) > 2]
+    if email.strip().lower() in existing_emails:
         st.error("❌ This email already exists in the sheet.")
         return False
 
-    row = get_next_available_row(sheet, 'C')  # Based on email column
-    sheet.update_cell(row, 2, name)       # Column B
-    sheet.update_cell(row, 3, email)      # Column C
-    sheet.update_cell(row, 6, reference)  # Column F
+    # Find the next empty row based on columns B (1), C (2), and F (5)
+    next_row = None
+    for i, row in enumerate(data[1:], start=2):  # Skip header row if any
+        b_empty = len(row) <= 1 or row[1].strip() == ""
+        c_empty = len(row) <= 2 or row[2].strip() == ""
+        f_empty = len(row) <= 5 or row[5].strip() == ""
+        if b_empty and c_empty and f_empty:
+            next_row = i
+            break
+
+    if not next_row:
+        next_row = len(data) + 1
+
+    # Update columns B, C, F
+    sheet.update_cell(next_row, 2, name)      # Column B
+    sheet.update_cell(next_row, 3, email)     # Column C
+    sheet.update_cell(next_row, 6, reference) # Column F
 
     return True
 
-# --------- STREAMLIT UI ---------
+# -------- Streamlit UI --------
 def main():
-    st.title("📋 Quick Contact Entry App")
+    st.set_page_config(page_title="Outreach Entry Form")
+    st.title("📋 Outreach Submission Form")
 
-    # ----- NAME SETTING (SIDEBAR) -----
-    st.sidebar.header("Your Name (Saved Locally)")
-    if "name" not in st.session_state:
-        st.session_state.name = ""
+    # Load saved name
+    saved_name = load_saved_name()
 
-    st.session_state.name = st.sidebar.text_input("Enter your name", st.session_state.name)
-
-    # ----- FORM -----
-    st.subheader("➕ Add New Contact")
     with st.form("entry_form"):
-        email = st.text_input("Contact Email / Info")
-        reference = st.text_input("Reference (Who referred or context?)")
-        submitted = st.form_submit_button("Submit Entry")
+        name = st.text_input("👤 Your Name", value=saved_name)
+        contact = st.text_input("📧 Client Email")
+        reference = st.text_area("📝 Reference Message")
+
+        submitted = st.form_submit_button("Submit")
 
         if submitted:
-            if st.session_state.name.strip() == "":
-                st.warning("⚠️ Please enter your name in the sidebar first.")
-            elif email.strip() == "":
-                st.warning("⚠️ Email/Contact cannot be empty.")
+            if not name or not contact or not reference:
+                st.warning("⚠️ Please fill in all fields.")
             else:
-                success = save_reference_entry(st.session_state.name.strip(), email.strip(), reference.strip())
+                save_name(name)
+                success = save_reference_entry(name, contact, reference)
                 if success:
                     st.success("✅ Entry submitted successfully!")
-                    # Clear input fields but retain name
-                    st.experimental_set_query_params()
-                    st.rerun()
-
+                    st.experimental_set_query_params()  # Clear query params
+                    st.session_state["contact"] = ""
+                    st.session_state["reference"] = ""
+                    
+# Run app
 if __name__ == "__main__":
     main()
