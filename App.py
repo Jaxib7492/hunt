@@ -64,13 +64,14 @@ def main():
     st.set_page_config(page_title="Outreach Entry Form")
     st.title("📋 Outreach Submission Form")
 
-    # Load saved name
-    saved_name = load_saved_name()
+    # Load saved name once
+    if "name" not in st.session_state:
+        st.session_state.name = load_saved_name()
 
     with st.form("entry_form"):
-        name = st.text_input("👤 Your Name", value=saved_name)
-        contact = st.text_input("📧 Client Email")
-        reference = st.text_area("📝 Reference Message")
+        name = st.text_input("👤 Your Name", value=st.session_state.name, key="name_input")
+        contact = st.text_input("📧 Client Email", key="contact")
+        reference = st.text_area("📝 Reference Message", key="reference")
 
         submitted = st.form_submit_button("Submit")
 
@@ -78,16 +79,19 @@ def main():
             if not name or not contact or not reference:
                 st.warning("⚠️ Please fill in all fields.")
             else:
-                save_name(name)
+                # Save name only if it's different
+                if name != st.session_state.name:
+                    save_name(name)
+                    st.session_state.name = name
+
                 success = save_reference_entry(name, contact, reference)
                 if success:
                     st.success("✅ Entry submitted successfully!")
 
-                    # Clear input fields except name
-                    st.session_state["contact"] = ""
-                    st.session_state["reference"] = ""
+                    # Clear contact and reference only
+                    st.session_state.contact = ""
+                    st.session_state.reference = ""
                     
-                    # ✅ Replace deprecated method
                     st.query_params.clear()
 
 # Run app
