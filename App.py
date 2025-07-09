@@ -39,9 +39,9 @@ def save_reference_entry(name, email, reference):
         st.error("❌ This email already exists in the sheet.")
         return False
 
-    # Find the next empty row
+    # Find the next empty row based on columns B (1), C (2), and F (5)
     next_row = None
-    for i, row in enumerate(data[1:], start=2):  # Skip header row
+    for i, row in enumerate(data[1:], start=2):  # Skip header row if any
         b_empty = len(row) <= 1 or row[1].strip() == ""
         c_empty = len(row) <= 2 or row[2].strip() == ""
         f_empty = len(row) <= 5 or row[5].strip() == ""
@@ -52,7 +52,7 @@ def save_reference_entry(name, email, reference):
     if not next_row:
         next_row = len(data) + 1
 
-    # Update sheet
+    # Update columns B, C, F
     sheet.update_cell(next_row, 2, name)      # Column B
     sheet.update_cell(next_row, 3, email)     # Column C
     sheet.update_cell(next_row, 6, reference) # Column F
@@ -64,17 +64,13 @@ def main():
     st.set_page_config(page_title="Outreach Entry Form")
     st.title("📋 Outreach Submission Form")
 
-    # Load and pre-fill name
+    # Load saved name
     saved_name = load_saved_name()
 
-    # Use session state for name (makes editable + persistent behavior)
-    if "name_input" not in st.session_state:
-        st.session_state["name_input"] = saved_name
-
     with st.form("entry_form"):
-        name = st.text_input("👤 Your Name", value=st.session_state["name_input"], key="name_input")
-        contact = st.text_input("📧 Client Email", key="contact")
-        reference = st.text_area("📝 Reference Message", key="reference")
+        name = st.text_input("👤 Your Name", value=saved_name)
+        contact = st.text_input("📧 Client Email")
+        reference = st.text_area("📝 Reference Message")
 
         submitted = st.form_submit_button("Submit")
 
@@ -82,17 +78,17 @@ def main():
             if not name or not contact or not reference:
                 st.warning("⚠️ Please fill in all fields.")
             else:
-                # Save name only if changed
-                if name != saved_name:
-                    save_name(name)
-
+                save_name(name)
                 success = save_reference_entry(name, contact, reference)
                 if success:
                     st.success("✅ Entry submitted successfully!")
 
-                    # Clear fields except name
+                    # Clear input fields except name
                     st.session_state["contact"] = ""
                     st.session_state["reference"] = ""
+                    
+                    # ✅ Replace deprecated method
+                    st.query_params.clear()
 
 # Run app
 if __name__ == "__main__":
