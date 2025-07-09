@@ -79,10 +79,12 @@ def main():
                 if success:
                     st.success("✅ Entry submitted successfully!")
 
-    # ✅ Show today's count for the current user
-    if name:
-        today_user_count = count_user_today_entries(name)
-        st.sidebar.markdown(f"### 📊 Your Entries Today: `{today_user_count}`")
+    # ✅ Show only current user's entry count in sidebar
+    if saved_name or name:
+        current_user = name if name else saved_name
+        user_count = count_user_today_entries(current_user)
+        st.sidebar.markdown("### 📊 Your Submissions Today:")
+        st.sidebar.markdown(f"- **{current_user}**: `{user_count}`")
 
 if __name__ == "__main__":
     main()
