@@ -44,9 +44,8 @@ def main():
     st.set_page_config(page_title="Outreach Submission Form")
     st.title("📋 Outreach Submission Form")
 
-    # Read query params
-    query_params = st.experimental_get_query_params()
-    saved_name = query_params.get("name", [""])[0]
+    # Read query params using the new API
+    saved_name = st.query_params.get("name", [""])[0]
 
     with st.form("entry_form"):
         name = st.text_input("👤 Your Name", value=saved_name)
@@ -59,8 +58,8 @@ def main():
             if not name or not contact or not reference:
                 st.warning("⚠️ Please fill in all fields.")
             else:
-                # Update the URL with the new name parameter
-                st.experimental_set_query_params(name=name)
+                # Update URL query params using new API
+                st.query_params = {"name": name}
 
                 # Save entry to Google Sheets
                 success = save_reference_entry(name, contact, reference)
