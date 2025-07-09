@@ -47,7 +47,6 @@ def main():
     if "update_query" not in st.session_state:
         st.session_state.update_query = False
 
-    # Load name from query params
     saved_name = st.query_params.get("name", [""])[0]
 
     with st.form("entry_form"):
@@ -66,9 +65,11 @@ def main():
                     st.success("✅ Entry submitted successfully!")
                     st.session_state.update_query = True
                     st.session_state.name_to_save = name
+                    # Immediately rerun and return to stop execution
                     st.experimental_rerun()
+                    return
 
-    # Update URL query params after rerun to avoid truncation issue
+    # Update query params after rerun to avoid truncation
     if st.session_state.get("update_query", False):
         st.query_params = {"name": st.session_state.name_to_save}
         st.session_state.update_query = False
