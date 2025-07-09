@@ -1,7 +1,7 @@
 import streamlit as st
+from st_cookies_manager import CookiesManager
 import gspread
 from google.oauth2 import service_account
-import os
 
 # -------- Google Sheets Setup --------
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1Bu8mzwoJUXw3JAD63nmTcmAlYo9GdR9vQyzGkukTWgA"
@@ -14,18 +14,8 @@ creds = service_account.Credentials.from_service_account_info(
 )
 client = gspread.authorize(creds)
 
-# -------- Persistent Name Store --------
-NAME_FILE = "name_store.txt"
-
-def save_name_to_file(name):
-    with open(NAME_FILE, "w", encoding="utf-8") as f:
-        f.write(name)
-
-def load_name_from_file():
-    if os.path.exists(NAME_FILE):
-        with open(NAME_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return ""
+# Initialize cookies manager
+cookies = CookiesManager()
 
 def save_reference_entry(name, email, reference):
     sheet = client.open_by_url(GSHEET_URL).worksheet(SHEET_NAME)
@@ -54,31 +44,18 @@ def save_reference_entry(name, email, reference):
 
     return True
 
-# ----------------------
-# Session-memory name handling WITHOUT session_state
-
-# Use a global variable to store the current name during the session
-_current_name = ""
-
-def get_current_name():
-    global _current_name
-    return _current_name
-
-def set_current_name(name):
-    global _current_name
-    _current_name = name
-
-# ----------------------
-
 def main():
     st.set_page_config(page_title="Outreach Submission Form")
     st.title("📋 Outreach Submission Form")
 
-    # Load current name in memory (starts empty on app launch)
-    current_name = get_current_name()
+    # Load cookies from user's browser
+    cookies.load()
+
+    # Get saved name from cookie or default to empty string
+    saved_name = cookies.get("user_name", "")
 
     with st.form("entry_form"):
-        name = st.text_input("👤 Your Name", value=current_name)
+        name = st.text_input("👤 Your Name", value=saved_name)
         contact = st.text_input("📧 Client Email")
         reference = st.text_area("📝 Reference Message")
 
@@ -88,11 +65,11 @@ def main():
             if not name or not contact or not reference:
                 st.warning("⚠️ Please fill in all fields.")
             else:
-                # Save name locally on disk
-                save_name_to_file(name)
-                # Save name in session memory (global variable)
-                set_current_name(name)
+                # Save the name in the cookie for persistent client-side storage
+                cookies["user_name"] = name
+                cookies.save()
 
+                # Save the entry to Google Sheets
                 success = save_reference_entry(name, contact, reference)
                 if success:
                     st.success("✅ Entry submitted successfully!")
