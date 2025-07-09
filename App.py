@@ -1,6 +1,7 @@
 import streamlit as st
 import gspread
 from google.oauth2 import service_account
+from datetime import datetime
 
 # -------- Google Sheets Setup --------
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1Bu8mzwoJUXw3JAD63nmTcmAlYo9GdR9vQyzGkukTWgA"
@@ -34,20 +35,34 @@ def save_reference_entry(name, email, reference):
     if not next_row:
         next_row = len(data) + 1
 
-    sheet.update_cell(next_row, 2, name)
-    sheet.update_cell(next_row, 3, email)
-    sheet.update_cell(next_row, 6, reference)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    sheet.update_cell(next_row, 2, name)       # Column B
+    sheet.update_cell(next_row, 3, email)      # Column C
+    sheet.update_cell(next_row, 6, reference)  # Column F
+    sheet.update_cell(next_row, 7, today_str)  # Column G
 
     return True
+
+def count_user_today_entries(name):
+    sheet = client.open_by_url(GSHEET_URL).worksheet(SHEET_NAME)
+    data = sheet.get_all_values()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    count = 0
+    for row in data[1:]:
+        if len(row) > 6:
+            row_name = row[1].strip().lower()
+            row_date = row[6].strip()
+            if row_name == name.strip().lower() and row_date == today_str:
+                count += 1
+    return count
 
 def main():
     st.set_page_config(page_title="Outreach Submission Form")
     st.title("📋 Outreach Submission Form")
 
-    # Read query params
-    # Use .get() with a default empty string for robustness
     saved_name = st.query_params.get("name", "")
-
+    
     with st.form("entry_form"):
         name = st.text_input("👤 Your Name", value=saved_name)
         contact = st.text_input("📧 Client Email")
@@ -59,14 +74,15 @@ def main():
             if not name or not contact or not reference:
                 st.warning("⚠️ Please fill in all fields.")
             else:
-                # Update URL query params using the dict-like assignment
-                # Ensure it's a direct assignment of the new dictionary
                 st.query_params["name"] = name
-
-                # Save entry to Google Sheets
                 success = save_reference_entry(name, contact, reference)
                 if success:
                     st.success("✅ Entry submitted successfully!")
+
+    # ✅ Show today's count for the current user
+    if name:
+        today_user_count = count_user_today_entries(name)
+        st.sidebar.markdown(f"### 📊 Your Entries Today: `{today_user_count}`")
 
 if __name__ == "__main__":
     main()
