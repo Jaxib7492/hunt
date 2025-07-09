@@ -32,7 +32,7 @@ def save_name(name):
 def save_reference_entry(name, email, reference):
     sheet = client.open_by_url(GSHEET_URL).worksheet(SHEET_NAME)
     data = sheet.get_all_values()
-    
+
     # Check for duplicate email in column C (index 2)
     existing_emails = [row[2].strip().lower() for row in data if len(row) > 2]
     if email.strip().lower() in existing_emails:
@@ -82,10 +82,14 @@ def main():
                 success = save_reference_entry(name, contact, reference)
                 if success:
                     st.success("✅ Entry submitted successfully!")
-                    st.experimental_set_query_params()  # Clear query params
+
+                    # Clear input fields except name
                     st.session_state["contact"] = ""
                     st.session_state["reference"] = ""
                     
+                    # ✅ Replace deprecated method
+                    st.query_params.clear()
+
 # Run app
 if __name__ == "__main__":
     main()
