@@ -1,5 +1,4 @@
 import streamlit as st
-from st_cookies_manager import CookiesManager
 import gspread
 from google.oauth2 import service_account
 
@@ -13,9 +12,6 @@ creds = service_account.Credentials.from_service_account_info(
     scopes=scopes
 )
 client = gspread.authorize(creds)
-
-# Initialize cookies manager
-cookies = CookiesManager()
 
 def save_reference_entry(name, email, reference):
     sheet = client.open_by_url(GSHEET_URL).worksheet(SHEET_NAME)
@@ -48,11 +44,9 @@ def main():
     st.set_page_config(page_title="Outreach Submission Form")
     st.title("📋 Outreach Submission Form")
 
-    # Load cookies from user's browser
-    cookies.load()
-
-    # Get saved name from cookie or default to empty string
-    saved_name = cookies.get("user_name", "")
+    # Read query params
+    query_params = st.experimental_get_query_params()
+    saved_name = query_params.get("name", [""])[0]
 
     with st.form("entry_form"):
         name = st.text_input("👤 Your Name", value=saved_name)
@@ -65,11 +59,10 @@ def main():
             if not name or not contact or not reference:
                 st.warning("⚠️ Please fill in all fields.")
             else:
-                # Save the name in the cookie for persistent client-side storage
-                cookies["user_name"] = name
-                cookies.save()
+                # Update the URL with the new name parameter
+                st.experimental_set_query_params(name=name)
 
-                # Save the entry to Google Sheets
+                # Save entry to Google Sheets
                 success = save_reference_entry(name, contact, reference)
                 if success:
                     st.success("✅ Entry submitted successfully!")
