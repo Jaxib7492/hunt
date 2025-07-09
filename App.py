@@ -44,10 +44,7 @@ def main():
     st.set_page_config(page_title="Outreach Submission Form")
     st.title("📋 Outreach Submission Form")
 
-    if "update_query" not in st.session_state:
-        st.session_state.update_query = False
-
-    # Load name from query params
+    # Read query params using the new API
     saved_name = st.query_params.get("name", [""])[0]
 
     with st.form("entry_form"):
@@ -61,17 +58,13 @@ def main():
             if not name or not contact or not reference:
                 st.warning("⚠️ Please fill in all fields.")
             else:
+                # Update URL query params using new API
+                st.query_params = {"name": name}
+
+                # Save entry to Google Sheets
                 success = save_reference_entry(name, contact, reference)
                 if success:
                     st.success("✅ Entry submitted successfully!")
-                    st.session_state.update_query = True
-                    st.session_state.name_to_save = name
-                    st.experimental_rerun()
-
-    # Update URL query params after rerun to avoid truncation issue
-    if st.session_state.get("update_query", False):
-        st.query_params = {"name": st.session_state.name_to_save}
-        st.session_state.update_query = False
 
 if __name__ == "__main__":
     main()
